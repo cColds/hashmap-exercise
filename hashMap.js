@@ -1,8 +1,16 @@
 const HashMap = () => {
   const loadFactor = 0.75;
   let capacity = 16;
-  let buckets = [];
+  let buckets = new Array(capacity).fill(null);
   let entriesAmount = 0;
+
+  class ListNode {
+    constructor(key, value, next = null) {
+      this.key = key;
+      this.value = value;
+      this.next = next;
+    }
+  }
 
   function hash(key) {
     let hashCode = 0;
@@ -16,21 +24,23 @@ const HashMap = () => {
   }
 
   const resize = () => {
+    const oldBuckets = buckets;
+    capacity *= 2;
+    buckets = new Array(capacity).fill(null);
+    entriesAmount = 0;
     console.log("Resizing bucket");
 
-    capacity *= 2;
-    let resizedBuckets = [];
-
-    for (const bucket of buckets) {
-      if (!bucket) continue;
-
-      const [key, value] = bucket;
-
-      const index = key % capacity;
-      resizedBuckets[index] = value;
+    for (const bucket of oldBuckets) {
+      if (bucket) {
+        let current = bucket;
+        while (current) {
+          set(current.key, current.value);
+          current = current.next;
+        }
+      }
     }
 
-    buckets = resizedBuckets;
+    return buckets;
   };
 
   const set = (key, value) => {
@@ -40,68 +50,104 @@ const HashMap = () => {
     if (index < 0 || index >= capacity) {
       throw new Error("Trying to access index out of bounds");
     }
-    const bucket = buckets[index];
+    const head = buckets[index];
+    let current = head;
 
-    if (bucket) {
-      console.log(
-        `Key collision matches old value. Overwriting "${bucket[1]}" to "${value}"`
-      );
-
-      buckets[index] = [key, value];
-
-      return;
+    // if node exists at bucket index, check if key matches
+    while (current) {
+      // overwrite value if key is the same and return
+      if (current.key === key) {
+        console.log(
+          `Key collision: current key matches old key "${key}". Overwriting value "${current.value}" to "${value}"`
+        );
+        current.value = value;
+        return;
+      }
+      // traverse through linked list
+      current = current.next;
     }
 
-    const threshold = capacity * loadFactor;
-
-    if (entriesAmount >= threshold) {
-      resize();
-      // May need to update the index because capacity changes
-    }
-
-    buckets[index] = [key, value];
+    const newNode = new ListNode(key, value, head);
+    buckets[index] = newNode;
     entriesAmount++;
 
+    const threshold = capacity * loadFactor;
+    if (entriesAmount > threshold) {
+      resize();
+    }
     return buckets;
   };
 
   const get = (key) => {
-    const index = key % capacity;
+    const hashedCode = hash(key);
 
-    const bucket = buckets[index];
+    const index = hashedCode % capacity;
 
-    if (!bucket) return null;
+    let current = buckets[index];
 
-    const value = bucket[1];
+    while (current) {
+      if (current.key === key) {
+        return current.value;
+      }
+      current = current.next;
+    }
 
-    return value;
+    return null;
   };
 
   const has = (key) => {
-    const index = key % capacity;
+    const hashedCode = hash(key);
 
-    return !!buckets[index];
+    const index = hashedCode % capacity;
+
+    let current = buckets[index];
+
+    while (current) {
+      if (current.key === key) {
+        return current.value;
+      }
+      current = current.next;
+    }
+
+    return null;
   };
 
   const remove = (key) => {
-    const index = key % capacity;
+    const hashedCode = hash(key);
+    const index = hashedCode % capacity;
 
-    if (!buckets[index]) {
-      return false;
+    let current = buckets[index];
+    let prev = null;
+
+    while (current) {
+      if (current.key === key) {
+        // point prevNext to the one after the removed node
+        if (prev) {
+          prev.next = current.next;
+        } else {
+          // if deleting head, prev will be null so just set head to curr.next
+          buckets[index] = current.next;
+        }
+        entriesAmount--;
+        return true;
+      }
+      prev = current;
+      current = current.next;
     }
 
-    buckets[index] = null;
-    entriesAmount--;
-    return true;
+    return false; // Key not found
   };
 
   const length = () => entriesAmount;
 
   const keys = () => {
     const keysList = [];
-    buckets.forEach((bucket) => {
-      if (bucket) {
-        keysList.push(bucket[0]);
+    buckets.forEach((_, i) => {
+      let current = buckets[i];
+
+      while (current) {
+        keysList.push(current.key);
+        current = current.next;
       }
     });
 
@@ -109,20 +155,18 @@ const HashMap = () => {
   };
 
   const clear = () => {
-    buckets.forEach((bucket) => {
-      if (bucket) {
-        const key = bucket[0];
-
-        remove(key);
-      }
-    });
+    buckets = new Array(capacity).fill(null);
+    entriesAmount = 0;
   };
 
   const values = () => {
     const valuesList = [];
-    buckets.forEach((bucket) => {
-      if (bucket) {
-        valuesList.push(bucket[1]);
+    buckets.forEach((_, i) => {
+      let current = buckets[i];
+
+      while (current) {
+        valuesList.push(current.value);
+        current = current.next;
       }
     });
 
@@ -130,8 +174,21 @@ const HashMap = () => {
   };
 
   const entries = () => {
-    return buckets.filter((bucket) => bucket);
+    const entriesList = [];
+
+    for (let i = 0; i < buckets.length; i++) {
+      let current = buckets[i];
+
+      while (current) {
+        entriesList.push([current.key, current.value]);
+        current = current.next;
+      }
+    }
+
+    return entriesList;
   };
+
+  const getBuckets = () => buckets;
 
   return {
     hash,
@@ -144,7 +201,7 @@ const HashMap = () => {
     clear,
     values,
     entries,
-    buckets,
+    getBuckets,
   };
 };
 
@@ -162,6 +219,18 @@ test.set("jacket", "blue");
 test.set("kite", "pink");
 test.set("lion", "golden");
 
+// Overwriting an existing key
 test.set("lion", "goldenrod");
-console.log(test.length());
+console.log(test.length()); // Output: 12
+
+// This should trigger a resize
 test.set("moon", "silver");
+console.log(test.length()); // Output: 13
+console.log(test.getBuckets().length); // 32
+
+console.log(test.get("moon")); // Output: "silver"
+console.log(test.get("lion")); // Output: "goldenrod"
+
+console.log(test.keys());
+console.log(test.values());
+console.log(test.entries());
